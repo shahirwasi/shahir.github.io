@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Photo Log</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+    }
+    input, textarea, button {
+      display: block;
+      margin-bottom: 10px;
+      width: 100%;
+    }
+    img {
+      max-width: 100px;
+      display: block;
+      margin-top: 5px;
+    }
+    .entry {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Photo Log</h1>
+
+  <input type="file" id="photo" accept="image/*">
+  <input type="text" id="location" placeholder="Enter location">
+  <textarea id="description" rows="3" placeholder="Enter description"></textarea>
+  <button onclick="addEntry()">Add Entry</button>
+  <button onclick="exportAsPDF()">Export as PDF</button>
+
+  <div id="entries"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    const entries = [];
+
+    function addEntry() {
+      const photoInput = document.getElementById("photo");
+      const location = document.getElementById("location").value;
+      const description = document.getElementById("description").value;
+
+      if (!photoInput.files[0]) {
+        alert("Please upload a photo.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const photoData = e.target.result;
+
+        const entry = { photo: photoData, location, description };
+        entries.push(entry);
+        displayEntries();
+        
+        // Clear inputs
+        photoInput.value = "";
+        document.getElementById("location").value = "";
+        document.getElementById("description").value = "";
+      };
+      reader.readAsDataURL(photoInput.files[0]);
+    }
+
+    function displayEntries() {
+      const container = document.getElementById("entries");
+      container.innerHTML = "";
+
+      entries.forEach((entry, index) => {
+        const div = document.createElement("div");
+        div.className = "entry";
+        div.innerHTML = `
+          <img src="${entry.photo}" alt="Photo ${index + 1}">
+          <strong>Location:</strong> ${entry.location}<br>
+          <strong>Description:</strong> ${entry.description}
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function exportAsPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      let y = 20;
+
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+
+        // Load image to get real dimensions
+        const img = new Image();
+        img.src = entry.photo;
+
+        await new Promise(resolve => {
+          img.onload = () => {
+            const pdfWidth = 50;
+            const aspectRatio = img.height / img.width;
+            const imgHeight = pdfWidth * aspectRatio;
+
+            // Check if there's enough space, if not add new page
+            if (y + imgHeight + 40 > doc.internal.pageSize.height) {
+              doc.addPage();
+              y = 20;
+            }
+
+            doc.addImage(entry.photo, 'JPEG', 20, y, pdfWidth, imgHeight);
+            y += imgHeight + 5;
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.text(`Location: ${entry.location}`, 20, y);
+            y += 7;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(11);
+            const desc = `Description: ${entry.description}`;
+            const splitDesc = doc.splitTextToSize(desc, 160);
+            doc.text(splitDesc, 20, y);
+            y += splitDesc.length * 6 + 10;
+
+            resolve();
+          };
+        });
+      }
+
+      doc.save("photo_log.pdf");
+    }
+  </script>
+</body>
+</html>
