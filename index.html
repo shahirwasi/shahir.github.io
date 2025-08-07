@@ -38,6 +38,7 @@
     function fixImageOrientation(img, orientation, callback) {
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
+
       let width = img.width;
       let height = img.height;
 
@@ -57,10 +58,15 @@
         case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
         case 7: ctx.transform(0, -1, -1, 0, height, width); break;
         case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
-        default: break;
+        default: ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
 
-      ctx.drawImage(img, 0, 0);
+      if ([5, 6, 7, 8].includes(orientation)) {
+        ctx.drawImage(img, 0, 0, height, width);
+      } else {
+        ctx.drawImage(img, 0, 0, width, height);
+      }
+
       callback(canvas.toDataURL("image/jpeg"));
     }
 
@@ -155,3 +161,4 @@
   </script>
 </body>
 </html>
+
