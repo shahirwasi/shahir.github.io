@@ -2,14 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Photo Logger</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
   <style>
     body { font-family: sans-serif; margin: 2em; }
     .entry { margin-bottom: 1.5em; border-bottom: 1px solid #ccc; padding-bottom: 1em; }
-    img { max-width: 100px; max-height: 100px; object-fit: contain; display: block; margin-top: 0.5em; }
+    /* Restrict max width but keep natural height to preserve aspect ratio */
+    img {
+      max-width: 100px;
+      height: auto;
+      display: block;
+      margin-top: 0.5em;
+    }
   </style>
 </head>
 <body>
@@ -61,10 +67,11 @@
         default: ctx.setTransform(1, 0, 0, 1, 0, 0);
       }
 
+      // Draw without specifying width/height to keep natural size
       if ([5, 6, 7, 8].includes(orientation)) {
-        ctx.drawImage(img, 0, 0, height, width);
+        ctx.drawImage(img, 0, 0);
       } else {
-        ctx.drawImage(img, 0, 0, width, height);
+        ctx.drawImage(img, 0, 0);
       }
 
       callback(canvas.toDataURL("image/jpeg"));
@@ -116,6 +123,7 @@
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF();
       const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 10;
       let y = margin;
 
@@ -129,7 +137,8 @@
           img.onload = () => {
             const aspectRatio = img.width / img.height;
             const maxWidth = pageWidth - margin * 2;
-            const maxHeight = 100;
+            const maxHeight = 100; // max height for all images
+
             let drawWidth = maxWidth;
             let drawHeight = drawWidth / aspectRatio;
 
@@ -138,7 +147,7 @@
               drawWidth = drawHeight * aspectRatio;
             }
 
-            if (y + drawHeight + 30 > pdf.internal.pageSize.getHeight()) {
+            if (y + drawHeight + 30 > pageHeight) {
               pdf.addPage();
               y = margin;
             }
@@ -161,4 +170,3 @@
   </script>
 </body>
 </html>
-
