@@ -2,84 +2,56 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Photo Log</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 20px;
-    }
-    input, textarea, button {
-      display: block;
-      margin-bottom: 10px;
-      width: 100%;
-    }
-    img {
-      max-width: 100px;
-      display: block;
-      margin-top: 5px;
-    }
-    .entry {
-      border: 1px solid #ccc;
-      padding: 10px;
-      margin-bottom: 10px;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photo Logger</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
 </head>
 <body>
-  <h1>Photo Log</h1>
+  <h1>Photo Logger</h1>
 
-  <input type="file" id="photo" accept="image/*">
-  <input type="text" id="location" placeholder="Enter location">
-  <textarea id="description" rows="3" placeholder="Enter description"></textarea>
+  <input type="file" accept="image/*" id="photoInput" />
+  <input type="text" id="locationInput" placeholder="Enter location" />
+  <textarea id="descriptionInput" placeholder="Enter description"></textarea>
   <button onclick="addEntry()">Add Entry</button>
   <button onclick="exportAsPDF()">Export as PDF</button>
 
-  <div id="entries"></div>
+  <ul id="entryList"></ul>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
     const entries = [];
 
     function addEntry() {
-      const photoInput = document.getElementById("photo");
-      const location = document.getElementById("location").value;
-      const description = document.getElementById("description").value;
+      const photoInput = document.getElementById('photoInput');
+      const location = document.getElementById('locationInput').value;
+      const description = document.getElementById('descriptionInput').value;
+      const file = photoInput.files[0];
 
-      if (!photoInput.files[0]) {
-        alert("Please upload a photo.");
+      if (!file) {
+        alert('Please select a photo.');
         return;
       }
 
       const reader = new FileReader();
-      reader.onload = function(e) {
+      reader.onload = function (e) {
         const photoData = e.target.result;
-
-        const entry = { photo: photoData, location, description };
-        entries.push(entry);
-        displayEntries();
-        
-        // Clear inputs
-        photoInput.value = "";
-        document.getElementById("location").value = "";
-        document.getElementById("description").value = "";
+        entries.push({ photo: photoData, location, description });
+        renderEntries();
       };
-      reader.readAsDataURL(photoInput.files[0]);
+      reader.readAsDataURL(file);
     }
 
-    function displayEntries() {
-      const container = document.getElementById("entries");
-      container.innerHTML = "";
-
+    function renderEntries() {
+      const list = document.getElementById('entryList');
+      list.innerHTML = '';
       entries.forEach((entry, index) => {
-        const div = document.createElement("div");
-        div.className = "entry";
-        div.innerHTML = `
-          <img src="${entry.photo}" alt="Photo ${index + 1}">
-          <strong>Location:</strong> ${entry.location}<br>
-          <strong>Description:</strong> ${entry.description}
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <img src="${entry.photo}" width="100" /><br/>
+          <strong>Location:</strong> ${entry.location}<br/>
+          <strong>Description:</strong> ${entry.description}<br/><br/>
         `;
-        container.appendChild(div);
+        list.appendChild(li);
       });
     }
 
@@ -90,39 +62,76 @@
 
       for (let i = 0; i < entries.length; i++) {
         const entry = entries[i];
-
-        // Load image to get real dimensions
         const img = new Image();
         img.src = entry.photo;
 
-        await new Promise(resolve => {
-          img.onload = () => {
-            const pdfWidth = 50;
-            const aspectRatio = img.height / img.width;
-            const imgHeight = pdfWidth * aspectRatio;
+        await new Promise((resolve) => {
+          img.onload = async () => {
+            EXIF.getData(img, function () {
+              const orientation = EXIF.getTag(this, "Orientation") || 1;
 
-            // Check if there's enough space, if not add new page
-            if (y + imgHeight + 40 > doc.internal.pageSize.height) {
-              doc.addPage();
-              y = 20;
-            }
+              const canvas = document.createElement("canvas");
+              const ctx = canvas.getContext("2d");
 
-            doc.addImage(entry.photo, 'JPEG', 20, y, pdfWidth, imgHeight);
-            y += imgHeight + 5;
+              let width = img.width;
+              let height = img.height;
 
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(12);
-            doc.text(`Location: ${entry.location}`, 20, y);
-            y += 7;
+              if (orientation > 4) {
+                canvas.width = height;
+                canvas.height = width;
+              } else {
+                canvas.width = width;
+                canvas.height = height;
+              }
 
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(11);
-            const desc = `Description: ${entry.description}`;
-            const splitDesc = doc.splitTextToSize(desc, 160);
-            doc.text(splitDesc, 20, y);
-            y += splitDesc.length * 6 + 10;
+              switch (orientation) {
+                case 2:
+                  ctx.transform(-1, 0, 0, 1, width, 0); break;
+                case 3:
+                  ctx.transform(-1, 0, 0, -1, width, height); break;
+                case 4:
+                  ctx.transform(1, 0, 0, -1, 0, height); break;
+                case 5:
+                  ctx.transform(0, 1, 1, 0, 0, 0); break;
+                case 6:
+                  ctx.transform(0, 1, -1, 0, height, 0); break;
+                case 7:
+                  ctx.transform(0, -1, -1, 0, height, width); break;
+                case 8:
+                  ctx.transform(0, -1, 1, 0, 0, width); break;
+                default:
+                  break;
+              }
 
-            resolve();
+              ctx.drawImage(img, 0, 0);
+              const rotatedDataUrl = canvas.toDataURL("image/jpeg");
+
+              const maxWidth = 60;
+              const aspectRatio = canvas.height / canvas.width;
+              const drawHeight = maxWidth * aspectRatio;
+
+              if (y + drawHeight + 40 > doc.internal.pageSize.height) {
+                doc.addPage();
+                y = 20;
+              }
+
+              doc.addImage(rotatedDataUrl, "JPEG", 20, y, maxWidth, drawHeight);
+              y += drawHeight + 5;
+
+              doc.setFont("helvetica", "bold");
+              doc.setFontSize(12);
+              doc.text(`Location: ${entry.location}`, 20, y);
+              y += 7;
+
+              doc.setFont("helvetica", "normal");
+              doc.setFontSize(11);
+              const desc = `Description: ${entry.description}`;
+              const splitDesc = doc.splitTextToSize(desc, 160);
+              doc.text(splitDesc, 20, y);
+              y += splitDesc.length * 6 + 10;
+
+              resolve();
+            });
           };
         });
       }
