@@ -3,109 +3,109 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Photo Logger</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+  <title>Photo Log</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       padding: 10px;
-      background: #f9f9f9;
-      max-width: 600px;
-      margin: auto;
+      margin: 0;
+      background-color: #f4f4f4;
     }
-    input, textarea, button {
+    input[type="file"], input[type="text"], textarea, button {
       width: 100%;
-      padding: 10px;
       margin: 10px 0;
-      box-sizing: border-box;
+      padding: 14px;
       font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
     }
-    #preview {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
     }
-    .entry {
-      background: #fff;
+    button:hover {
+      background-color: #0056b3;
+    }
+    #entries > div {
+      background: white;
+      margin-top: 10px;
       padding: 10px;
       border-radius: 8px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
     }
-    .entry img {
+    img.preview {
       max-width: 100%;
       height: auto;
       display: block;
       margin-bottom: 10px;
-      border-radius: 5px;
     }
-    .buttons {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
+    #clearButton {
+      background-color: #dc3545;
+      position: sticky;
+      bottom: 0;
     }
   </style>
 </head>
 <body>
-  <input type="file" accept="image/*" id="photoInput" />
-  <input type="text" id="locationInput" placeholder="Enter location" />
-  <textarea id="descriptionInput" rows="3" placeholder="Enter description"></textarea>
-  <div class="buttons">
-    <button onclick="exportPDF()">Export as PDF</button>
-  </div>
-  <div id="preview"></div>
-  <button onclick="clearEntries()" style="background: #f44336; color: white;">Clear All Entries</button>
+  <input type="file" id="photo" accept="image/*" capture="environment">
+  <input type="text" id="location" placeholder="Enter location">
+  <textarea id="description" placeholder="Enter description"></textarea>
+  <button id="addEntry">Add Entry</button>
+  <button id="exportPDF">Export as PDF</button>
+  <div id="entries"></div>
+  <button id="clearButton">Clear All Entries</button>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
   <script>
-    const photoInput = document.getElementById("photoInput");
-    const locationInput = document.getElementById("locationInput");
-    const descriptionInput = document.getElementById("descriptionInput");
-    const preview = document.getElementById("preview");
-    let entries = JSON.parse(localStorage.getItem("photoLogEntries")) || [];
+    const photoInput = document.getElementById('photo');
+    const locationInput = document.getElementById('location');
+    const descriptionInput = document.getElementById('description');
+    const addEntryButton = document.getElementById('addEntry');
+    const exportPDFButton = document.getElementById('exportPDF');
+    const entriesContainer = document.getElementById('entries');
+    const clearButton = document.getElementById('clearButton');
+
+    let entries = JSON.parse(localStorage.getItem('photoLogEntries')) || [];
 
     function saveEntries() {
-      localStorage.setItem("photoLogEntries", JSON.stringify(entries));
-    }
-
-    function clearEntries() {
-      if (confirm("Are you sure you want to clear all entries?")) {
-        entries = [];
-        saveEntries();
-        renderEntries();
-      }
+      localStorage.setItem('photoLogEntries', JSON.stringify(entries));
     }
 
     function renderEntries() {
-      preview.innerHTML = "";
-      entries.forEach((entry, index) => {
-        const div = document.createElement("div");
-        div.className = "entry";
-        const img = document.createElement("img");
+      entriesContainer.innerHTML = '';
+      entries.forEach(entry => {
+        const div = document.createElement('div');
+        const img = document.createElement('img');
         img.src = entry.image;
-        const loc = document.createElement("p");
+        img.className = 'preview';
+        const loc = document.createElement('p');
         loc.textContent = `Location: ${entry.location}`;
-        const desc = document.createElement("p");
+        const desc = document.createElement('p');
         desc.textContent = `Description: ${entry.description}`;
         div.appendChild(img);
         div.appendChild(loc);
         div.appendChild(desc);
-        preview.appendChild(div);
+        entriesContainer.appendChild(div);
       });
     }
 
-    function handleImage(file, callback) {
+    function getImageWithOrientation(file, callback) {
       const reader = new FileReader();
-      reader.onload = function(e) {
+      reader.onload = function (e) {
         const img = new Image();
-        img.onload = function() {
-          EXIF.getData(img, function() {
+        img.onload = function () {
+          EXIF.getData(img, function () {
             const orientation = EXIF.getTag(this, "Orientation") || 1;
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
             let width = img.width;
             let height = img.height;
 
-            if ([5,6,7,8].includes(orientation)) {
+            if (orientation > 4 && orientation < 9) {
               canvas.width = height;
               canvas.height = width;
             } else {
@@ -121,11 +121,11 @@
               case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
               case 7: ctx.transform(0, -1, -1, 0, height, width); break;
               case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
-              default: break;
+              default: ctx.transform(1, 0, 0, 1, 0, 0);
             }
 
             ctx.drawImage(img, 0, 0);
-            callback(canvas.toDataURL("image/jpeg"));
+            callback(canvas.toDataURL('image/jpeg'));
           });
         };
         img.src = e.target.result;
@@ -133,64 +133,58 @@
       reader.readAsDataURL(file);
     }
 
-    photoInput.addEventListener("change", function() {
-      const file = this.files[0];
-      if (!file) return;
-      handleImage(file, (dataUrl) => {
-        const location = locationInput.value.trim();
-        const description = descriptionInput.value.trim();
-        if (!location || !description) {
-          alert("Please enter location and description.");
-          return;
-        }
-        const entry = { image: dataUrl, location, description };
-        entries.push(entry);
+    addEntryButton.addEventListener('click', () => {
+      const file = photoInput.files[0];
+      const location = locationInput.value.trim();
+      const description = descriptionInput.value.trim();
+      if (!file || !location || !description) return alert("Please complete all fields.");
+
+      getImageWithOrientation(file, (imageDataUrl) => {
+        entries.push({ image: imageDataUrl, location, description });
         saveEntries();
         renderEntries();
-        photoInput.value = "";
-        locationInput.value = "";
-        descriptionInput.value = "";
+        photoInput.value = '';
+        locationInput.value = '';
+        descriptionInput.value = '';
       });
     });
 
-    async function exportPDF() {
+    exportPDFButton.addEventListener('click', async () => {
       const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF();
-      let y = 10;
-
+      const doc = new jsPDF();
       for (let i = 0; i < entries.length; i++) {
+        if (i !== 0) doc.addPage();
         const entry = entries[i];
         const img = new Image();
         img.src = entry.image;
-
         await new Promise(resolve => {
           img.onload = () => {
-            const maxW = 180;
-            const maxH = 180;
-            let w = img.width;
-            let h = img.height;
-            if (w > maxW || h > maxH) {
-              const ratio = Math.min(maxW / w, maxH / h);
-              w *= ratio;
-              h *= ratio;
+            const imgProps = doc.getImageProperties(img);
+            const pdfWidth = doc.internal.pageSize.getWidth();
+            const pdfHeight = doc.internal.pageSize.getHeight();
+            let width = pdfWidth - 40;
+            let height = (imgProps.height * width) / imgProps.width;
+            if (height > pdfHeight / 2) {
+              height = pdfHeight / 2;
+              width = (imgProps.width * height) / imgProps.height;
             }
-            if (y + h > 280) {
-              pdf.addPage();
-              y = 10;
-            }
-            pdf.addImage(img, "JPEG", 15, y, w, h);
-            y += h + 5;
-            pdf.setFontSize(12);
-            pdf.text(`Location: ${entry.location}`, 15, y);
-            y += 6;
-            pdf.text(`Description: ${entry.description}`, 15, y);
-            y += 10;
+            doc.addImage(img, 'JPEG', (pdfWidth - width) / 2, 20, width, height);
+            doc.text(`Location: ${entry.location}`, 10, height + 40);
+            doc.text(`Description: ${entry.description}`, 10, height + 55);
             resolve();
           };
         });
       }
-      pdf.save("photo_log.pdf");
-    }
+      doc.save('photo_log.pdf');
+    });
+
+    clearButton.addEventListener('click', () => {
+      if (confirm("Are you sure you want to clear all entries?")) {
+        entries = [];
+        saveEntries();
+        renderEntries();
+      }
+    });
 
     renderEntries();
   </script>
