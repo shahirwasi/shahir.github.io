@@ -9,22 +9,22 @@
     button { margin-top: 10px; }
     img { max-width: 100px; margin: 10px 0; display: block; }
     .entry { border-bottom: 1px solid #ccc; padding: 10px 0; }
-    #saveInstructions { color: green; margin-top: 10px; }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
 <h2>Photo Logger</h2>
 
 <form id="entryForm">
-  <label>Photo:</label><br />
-  <input type="file" id="photo" accept="image/*" capture="environment" required /><br />
+  <label>Photo:</label><br>
+  <input type="file" id="photo" accept="image/*" capture="environment" required><br>
 
-  <label>Location:</label><br />
-  <input type="text" id="location" placeholder="Enter location" required /><br />
+  <label>Location:</label><br>
+  <input type="text" id="location" placeholder="Enter location" required><br>
 
-  <label>Description:</label><br />
-  <textarea id="description" rows="3" placeholder="Enter description" required></textarea><br />
+  <label>Description:</label><br>
+  <textarea id="description" rows="3" placeholder="Enter description" required></textarea><br>
 
   <button type="submit">Add Entry</button>
 </form>
@@ -32,17 +32,13 @@
 <h3>Entries</h3>
 <div id="entries"></div>
 
-<!-- Download area -->
-<button onclick="exportAsPDF()">Export as PDF</button>
-<div id="saveInstructions"></div>
+<button onclick="exportToPDF()">Export as PDF</button>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
 <script>
   let entries = [];
   let count = 1;
 
-  document.getElementById('entryForm').addEventListener('submit', function (e) {
+  document.getElementById('entryForm').addEventListener('submit', function(e) {
     e.preventDefault();
 
     const photoInput = document.getElementById('photo');
@@ -52,20 +48,26 @@
 
     if (!file) return;
 
-    loadImageAndFixOrientation(file, function (correctedDataUrl) {
+    const reader = new FileReader();
+    reader.onload = function() {
+      const imgData = reader.result;
+
       const entry = {
         number: count++,
         location,
         description,
-        photo: correctedDataUrl
+        photo: imgData
       };
+
       entries.push(entry);
       displayEntries();
 
+      // Reset form
       photoInput.value = "";
       document.getElementById('location').value = "";
       document.getElementById('description').value = "";
-    });
+    };
+    reader.readAsDataURL(file);
   });
 
   function displayEntries() {
@@ -85,100 +87,54 @@
     });
   }
 
-  function exportAsPDF() {
+  async function exportToPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    let y = 10;
-    const margin = 10;
 
-    function addEntryToPDF(entry, callback) {
-      const img = new Image();
-      img.onload = function () {
-        const imgWidth = 180;
-        const aspectRatio = img.width / img.height;
-        const imgHeight = imgWidth / aspectRatio;
-
-        if (y + imgHeight > 280) {
-          doc.addPage();
-          y = margin;
-        }
-
-        doc.addImage(img, 'JPEG', margin, y, imgWidth, imgHeight);
-        y += imgHeight + 5;
-
-        const textLines = [
-          `Location: ${entry.location}`,
-          `Description: ${entry.description}`
-        ];
-
-        textLines.forEach(line => {
-          if (y + 10 > 280) {
-            doc.addPage();
-            y = margin;
-          }
-          doc.text(line, margin, y);
-          y += 10;
-        });
-
-        y += 10;
-        callback();
-      };
-      img.src = entry.photo;
-    }
-
-    function processEntries(index) {
-      if (index >= entries.length) {
-        doc.save("photo_log.pdf");
-        return;
-      }
-      addEntryToPDF(entries[index], function () {
-        processEntries(index + 1);
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const imgProps = await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = function () {
+          const ratio = img.width / img.height;
+          const width = 50;
+          const height = width / ratio;
+          resolve({ img, width, height });
+        };
+        img.src = entry.photo;
       });
+
+      if (i > 0) doc.addPage();
+
+      doc.setFontSize(14);
+      doc.text(`Entry #${entry.number}`, 10, 20);
+      doc.addImage(imgProps.img, 'JPEG', 10, 30, imgProps.width, imgProps.height);
+      let yOffset = 30 + imgProps.height + 10;
+
+      doc.setFontSize(12);
+      doc.text(`Location: ${entry.location}`, 10, yOffset);
+      yOffset += 10;
+      doc.text(`Description: ${entry.description}`, 10, yOffset);
     }
 
-    processEntries(0);
-  }
+    const pdfBlob = doc.output('blob');
 
-  function loadImageAndFixOrientation(file, callback) {
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      const img = new Image();
-      img.onload = function () {
-        EXIF.getData(img, function () {
-          const orientation = EXIF.getTag(this, "Orientation") || 1;
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
-          let width = img.width;
-          let height = img.height;
-
-          if (orientation > 4) {
-            canvas.width = height;
-            canvas.height = width;
-          } else {
-            canvas.width = width;
-            canvas.height = height;
-          }
-
-          switch (orientation) {
-            case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
-            case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
-            case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
-            case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
-            case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
-            case 7: ctx.transform(0, -1, -1, 0, height, width); break;
-            case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
-            default: ctx.setTransform(1, 0, 0, 1, 0, 0);
-          }
-
-          ctx.drawImage(img, 0, 0);
-          const correctedDataUrl = canvas.toDataURL("image/jpeg");
-          callback(correctedDataUrl);
+    if (navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], 'photo_log.pdf', { type: 'application/pdf' })] })) {
+      try {
+        await navigator.share({
+          files: [new File([pdfBlob], 'photo_log.pdf', { type: 'application/pdf' })],
+          title: 'Photo Log',
+          text: 'Here is your exported photo log PDF.'
         });
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+      } catch (err) {
+        alert('Sharing failed: ' + err.message);
+      }
+    } else {
+      // fallback for desktop browsers: download
+      doc.save('photo_log.pdf');
+    }
   }
 </script>
+
 </body>
 </html>
