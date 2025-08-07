@@ -1,165 +1,198 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Photo Log</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
-    <style>
-        body {
-            font-family: sans-serif;
-            margin: 20px;
-        }
-        img {
-            max-width: 100%;
-            height: auto;
-        }
-        .entry {
-            margin-bottom: 30px;
-            border: 1px solid #ccc;
-            padding: 10px;
-        }
-        .controls {
-            margin-bottom: 20px;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photo Logger</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 10px;
+      background: #f9f9f9;
+      max-width: 600px;
+      margin: auto;
+    }
+    input, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+    #preview {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .entry {
+      background: #fff;
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+    .entry img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+  </style>
 </head>
 <body>
-    <h1>Photo Log</h1>
-    <div class="controls">
-        <input type="file" accept="image/*" capture="environment" id="photo">
-        <input type="text" id="location" placeholder="Location">
-        <input type="text" id="description" placeholder="Description">
-        <button onclick="addEntry()">Add Entry</button>
-        <button onclick="exportPDF()">Export as PDF</button>
-        <button onclick="clearEntries()">Clear Entries</button>
-    </div>
-    <div id="entries"></div>
+  <input type="file" accept="image/*" id="photoInput" />
+  <input type="text" id="locationInput" placeholder="Enter location" />
+  <textarea id="descriptionInput" rows="3" placeholder="Enter description"></textarea>
+  <div class="buttons">
+    <button onclick="exportPDF()">Export as PDF</button>
+  </div>
+  <div id="preview"></div>
+  <button onclick="clearEntries()" style="background: #f44336; color: white;">Clear All Entries</button>
 
-    <script>
-        const entries = JSON.parse(localStorage.getItem('photoLogEntries') || '[]');
-        const entriesContainer = document.getElementById('entries');
+  <script>
+    const photoInput = document.getElementById("photoInput");
+    const locationInput = document.getElementById("locationInput");
+    const descriptionInput = document.getElementById("descriptionInput");
+    const preview = document.getElementById("preview");
+    let entries = JSON.parse(localStorage.getItem("photoLogEntries")) || [];
 
-        window.onload = () => {
-            entries.forEach(renderEntry);
+    function saveEntries() {
+      localStorage.setItem("photoLogEntries", JSON.stringify(entries));
+    }
+
+    function clearEntries() {
+      if (confirm("Are you sure you want to clear all entries?")) {
+        entries = [];
+        saveEntries();
+        renderEntries();
+      }
+    }
+
+    function renderEntries() {
+      preview.innerHTML = "";
+      entries.forEach((entry, index) => {
+        const div = document.createElement("div");
+        div.className = "entry";
+        const img = document.createElement("img");
+        img.src = entry.image;
+        const loc = document.createElement("p");
+        loc.textContent = `Location: ${entry.location}`;
+        const desc = document.createElement("p");
+        desc.textContent = `Description: ${entry.description}`;
+        div.appendChild(img);
+        div.appendChild(loc);
+        div.appendChild(desc);
+        preview.appendChild(div);
+      });
+    }
+
+    function handleImage(file, callback) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          EXIF.getData(img, function() {
+            const orientation = EXIF.getTag(this, "Orientation") || 1;
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            let width = img.width;
+            let height = img.height;
+
+            if ([5,6,7,8].includes(orientation)) {
+              canvas.width = height;
+              canvas.height = width;
+            } else {
+              canvas.width = width;
+              canvas.height = height;
+            }
+
+            switch (orientation) {
+              case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
+              case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
+              case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
+              case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
+              case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
+              case 7: ctx.transform(0, -1, -1, 0, height, width); break;
+              case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
+              default: break;
+            }
+
+            ctx.drawImage(img, 0, 0);
+            callback(canvas.toDataURL("image/jpeg"));
+          });
         };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
 
-        function saveEntries() {
-            localStorage.setItem('photoLogEntries', JSON.stringify(entries));
+    photoInput.addEventListener("change", function() {
+      const file = this.files[0];
+      if (!file) return;
+      handleImage(file, (dataUrl) => {
+        const location = locationInput.value.trim();
+        const description = descriptionInput.value.trim();
+        if (!location || !description) {
+          alert("Please enter location and description.");
+          return;
         }
+        const entry = { image: dataUrl, location, description };
+        entries.push(entry);
+        saveEntries();
+        renderEntries();
+        photoInput.value = "";
+        locationInput.value = "";
+        descriptionInput.value = "";
+      });
+    });
 
-        function clearEntries() {
-            if (confirm('Are you sure you want to delete all entries?')) {
-                entries.length = 0;
-                saveEntries();
-                entriesContainer.innerHTML = '';
+    async function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF();
+      let y = 10;
+
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const img = new Image();
+        img.src = entry.image;
+
+        await new Promise(resolve => {
+          img.onload = () => {
+            const maxW = 180;
+            const maxH = 180;
+            let w = img.width;
+            let h = img.height;
+            if (w > maxW || h > maxH) {
+              const ratio = Math.min(maxW / w, maxH / h);
+              w *= ratio;
+              h *= ratio;
             }
-        }
-
-        function renderEntry(entry) {
-            const div = document.createElement('div');
-            div.className = 'entry';
-            div.innerHTML = `
-                <img src="${entry.image}"><br>
-                <strong>Location:</strong> ${entry.location}<br>
-                <strong>Description:</strong> ${entry.description}
-            `;
-            entriesContainer.appendChild(div);
-        }
-
-        function addEntry() {
-            const fileInput = document.getElementById('photo');
-            const location = document.getElementById('location').value;
-            const description = document.getElementById('description').value;
-            const file = fileInput.files[0];
-
-            if (!file) return alert('Please select a photo.');
-
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                const img = new Image();
-                img.onload = function () {
-                    EXIF.getData(file, function () {
-                        const orientation = EXIF.getTag(this, 'Orientation') || 1;
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-
-                        let width = img.width;
-                        let height = img.height;
-
-                        if (orientation > 4) {
-                            canvas.width = height;
-                            canvas.height = width;
-                        } else {
-                            canvas.width = width;
-                            canvas.height = height;
-                        }
-
-                        switch (orientation) {
-                            case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
-                            case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
-                            case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
-                            case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
-                            case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
-                            case 7: ctx.transform(0, -1, -1, 0, height, width); break;
-                            case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
-                            default: break;
-                        }
-
-                        ctx.drawImage(img, 0, 0);
-                        const dataURL = canvas.toDataURL('image/jpeg');
-
-                        const entry = { image: dataURL, location, description };
-                        entries.push(entry);
-                        saveEntries();
-                        renderEntry(entry);
-                        fileInput.value = '';
-                        document.getElementById('location').value = '';
-                        document.getElementById('description').value = '';
-                    });
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        }
-
-        async function exportPDF() {
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF();
-            let y = 10;
-
-            for (let i = 0; i < entries.length; i++) {
-                const entry = entries[i];
-                const img = new Image();
-                img.src = entry.image;
-
-                await new Promise(resolve => {
-                    img.onload = () => {
-                        const pageWidth = pdf.internal.pageSize.getWidth();
-                        const maxWidth = pageWidth - 20;
-                        const ratio = img.width / img.height;
-                        const width = Math.min(maxWidth, img.width * 0.2);
-                        const height = width / ratio;
-
-                        if (y + height > pdf.internal.pageSize.getHeight() - 30) {
-                            pdf.addPage();
-                            y = 10;
-                        }
-
-                        pdf.addImage(img, 'JPEG', 10, y, width, height);
-                        y += height + 5;
-                        pdf.text(`Location: ${entry.location}`, 10, y);
-                        y += 7;
-                        pdf.text(`Description: ${entry.description}`, 10, y);
-                        y += 15;
-                        resolve();
-                    };
-                });
+            if (y + h > 280) {
+              pdf.addPage();
+              y = 10;
             }
+            pdf.addImage(img, "JPEG", 15, y, w, h);
+            y += h + 5;
+            pdf.setFontSize(12);
+            pdf.text(`Location: ${entry.location}`, 15, y);
+            y += 6;
+            pdf.text(`Description: ${entry.description}`, 15, y);
+            y += 10;
+            resolve();
+          };
+        });
+      }
+      pdf.save("photo_log.pdf");
+    }
 
-            pdf.save('photo_log.pdf');
-        }
-    </script>
+    renderEntries();
+  </script>
 </body>
 </html>
-
