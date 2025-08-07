@@ -158,6 +158,9 @@
       fixImageOrientation(file, (correctedImage) => {
         entries.push({ image: correctedImage, location, description });
         localStorage.setItem('photoLogEntries', JSON.stringify(entries));
+        
+        console.log('Entries after add:', entries); // debug log
+        
         renderEntries();
 
         photoInput.value = '';
