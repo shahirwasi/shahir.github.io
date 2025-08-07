@@ -71,6 +71,10 @@
   <button id="clearButton">Clear All Entries</button>
 
   <script>
+    // Load entries from localStorage or start empty
+    let entries = JSON.parse(localStorage.getItem('photoLogEntries')) || [];
+
+    // DOM references
     const photoInput = document.getElementById('photoInput');
     const locationInput = document.getElementById('locationInput');
     const descriptionInput = document.getElementById('descriptionInput');
@@ -79,23 +83,22 @@
     const entriesContainer = document.getElementById('entries');
     const clearButton = document.getElementById('clearButton');
 
-    let entries = JSON.parse(localStorage.getItem('photoLogEntries')) || [];
-
+    // Render entries in the page
     function renderEntries() {
       entriesContainer.innerHTML = '';
-      entries.forEach(entry => {
+      entries.forEach(({ image, location, description }) => {
         const div = document.createElement('div');
         div.className = 'entry';
 
         const img = document.createElement('img');
-        img.src = entry.image;
+        img.src = image;
         img.className = 'preview';
 
         const loc = document.createElement('p');
-        loc.textContent = `Location: ${entry.location}`;
+        loc.textContent = `Location: ${location}`;
 
         const desc = document.createElement('p');
-        desc.textContent = `Description: ${entry.description}`;
+        desc.textContent = `Description: ${description}`;
 
         div.appendChild(img);
         div.appendChild(loc);
@@ -104,6 +107,7 @@
       });
     }
 
+    // Fix image orientation using EXIF data
     function fixImageOrientation(file, callback) {
       const reader = new FileReader();
       reader.onload = function (e) {
@@ -145,6 +149,7 @@
       reader.readAsDataURL(file);
     }
 
+    // Add entry button handler
     addEntryButton.addEventListener('click', () => {
       const file = photoInput.files[0];
       const location = locationInput.value.trim();
@@ -158,18 +163,22 @@
       fixImageOrientation(file, (correctedImage) => {
         entries.push({ image: correctedImage, location, description });
         localStorage.setItem('photoLogEntries', JSON.stringify(entries));
-        
-        console.log('Entries after add:', entries); // debug log
-        
         renderEntries();
 
+        // Clear inputs
         photoInput.value = '';
         locationInput.value = '';
         descriptionInput.value = '';
       });
     });
 
+    // Export PDF button handler
     exportPDFButton.addEventListener('click', async () => {
+      if (entries.length === 0) {
+        alert('No entries to export.');
+        return;
+      }
+
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
       let y = 10;
@@ -184,9 +193,8 @@
 
         await new Promise(resolve => {
           img.onload = () => {
-            // Calculate proportional image size to max width and max height per entry
             const maxWidth = doc.internal.pageSize.getWidth() - 2 * margin;
-            const maxHeight = (pageHeight - 4 * margin) / 3 - 25; // space for image + text per entry
+            const maxHeight = (pageHeight - 4 * margin) / 3 - 25;
             let width = img.width;
             let height = img.height;
             const ratio = Math.min(maxWidth / width, maxHeight / height);
@@ -217,6 +225,7 @@
       doc.save('photo_log.pdf');
     });
 
+    // Clear entries button handler
     clearButton.addEventListener('click', () => {
       if (confirm('Are you sure you want to delete all entries?')) {
         entries = [];
@@ -225,7 +234,7 @@
       }
     });
 
-    // Render saved entries on page load
+    // Render saved entries on load
     renderEntries();
   </script>
 </body>
