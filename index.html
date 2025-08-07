@@ -118,6 +118,7 @@
       localStorage.setItem('photoLogEntries', JSON.stringify(entries));
       renderEntries();
 
+      // Reset inputs AFTER saving entry
       photoInput.value = '';
       locationInput.value = '';
       descriptionInput.value = '';
@@ -184,7 +185,7 @@
     }
   });
 
-  // Render entries on load
+  // On page load, render any saved entries
   renderEntries();
 </script>
 </body>
