@@ -1,10 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Photo Logger</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
   <style>
     body { font-family: Arial; padding: 20px; max-width: 600px; margin: auto; }
     input, textarea { width: 100%; margin-top: 10px; }
@@ -19,14 +17,14 @@
 <h2>Photo Logger</h2>
 
 <form id="entryForm">
-  <label>Photo:</label><br>
-  <input type="file" id="photo" accept="image/*" capture="environment" required><br>
+  <label>Photo:</label><br />
+  <input type="file" id="photo" accept="image/*" capture="environment" required /><br />
 
-  <label>Location:</label><br>
-  <input type="text" id="location" placeholder="Enter location" required><br>
+  <label>Location:</label><br />
+  <input type="text" id="location" placeholder="Enter location" required /><br />
 
-  <label>Description:</label><br>
-  <textarea id="description" rows="3" placeholder="Enter description" required></textarea><br>
+  <label>Description:</label><br />
+  <textarea id="description" rows="3" placeholder="Enter description" required></textarea><br />
 
   <button type="submit">Add Entry</button>
 </form>
@@ -34,14 +32,17 @@
 <h3>Entries</h3>
 <div id="entries"></div>
 
-<button onclick="exportPDF()">Export as PDF</button>
+<!-- Download area -->
+<button onclick="exportAsPDF()">Export as PDF</button>
 <div id="saveInstructions"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
 <script>
   let entries = [];
   let count = 1;
 
-  document.getElementById('entryForm').addEventListener('submit', function(e) {
+  document.getElementById('entryForm').addEventListener('submit', function (e) {
     e.preventDefault();
 
     const photoInput = document.getElementById('photo');
@@ -51,61 +52,20 @@
 
     if (!file) return;
 
-    const reader = new FileReader();
-
-    reader.onload = function(e) {
-      const img = new Image();
-      img.onload = function() {
-        EXIF.getData(file, function() {
-          const orientation = EXIF.getTag(this, "Orientation") || 1;
-          const canvas = document.createElement("canvas");
-          const ctx = canvas.getContext("2d");
-          let width = img.width;
-          let height = img.height;
-
-          if (orientation > 4) {
-            canvas.width = height;
-            canvas.height = width;
-          } else {
-            canvas.width = width;
-            canvas.height = height;
-          }
-
-          // Rotate based on orientation
-          switch (orientation) {
-            case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
-            case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
-            case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
-            case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
-            case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
-            case 7: ctx.transform(0, -1, -1, 0, height, width); break;
-            case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
-            default: break;
-          }
-
-          ctx.drawImage(img, 0, 0);
-          const fixedData = canvas.toDataURL("image/jpeg");
-
-          const entry = {
-            number: count++,
-            location,
-            description,
-            photo: fixedData
-          };
-
-          entries.push(entry);
-          displayEntries();
-
-          // Reset form
-          photoInput.value = "";
-          document.getElementById('location').value = "";
-          document.getElementById('description').value = "";
-        });
+    loadImageAndFixOrientation(file, function (correctedDataUrl) {
+      const entry = {
+        number: count++,
+        location,
+        description,
+        photo: correctedDataUrl
       };
-      img.src = e.target.result;
-    };
+      entries.push(entry);
+      displayEntries();
 
-    reader.readAsDataURL(file);
+      photoInput.value = "";
+      document.getElementById('location').value = "";
+      document.getElementById('description').value = "";
+    });
   });
 
   function displayEntries() {
@@ -125,39 +85,100 @@
     });
   }
 
-  async function exportPDF() {
-    const {{ jsPDF }} = window.jspdf;
+  function exportAsPDF() {
+    const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    let y = 20;
+    let y = 10;
     const margin = 10;
-    const pageHeight = doc.internal.pageSize.height;
 
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      const imgProps = doc.getImageProperties(entry.photo);
+    function addEntryToPDF(entry, callback) {
+      const img = new Image();
+      img.onload = function () {
+        const imgWidth = 180;
+        const aspectRatio = img.width / img.height;
+        const imgHeight = imgWidth / aspectRatio;
 
-      const imgWidth = 180;
-      const ratio = imgProps.height / imgProps.width;
-      const imgHeight = imgWidth * ratio;
+        if (y + imgHeight > 280) {
+          doc.addPage();
+          y = margin;
+        }
 
-      if (y + imgHeight + 40 > pageHeight) {
-        doc.addPage();
-        y = 20;
-      }
+        doc.addImage(img, 'JPEG', margin, y, imgWidth, imgHeight);
+        y += imgHeight + 5;
 
-      doc.addImage(entry.photo, 'JPEG', margin, y, imgWidth, imgHeight);
-      y += imgHeight + 5;
+        const textLines = [
+          `Location: ${entry.location}`,
+          `Description: ${entry.description}`
+        ];
 
-      doc.setFontSize(12);
-      doc.text(`Location: ${entry.location}`, margin, y);
-      y += 6;
-      doc.text(`Description: ${entry.description}`, margin, y);
-      y += 14;
+        textLines.forEach(line => {
+          if (y + 10 > 280) {
+            doc.addPage();
+            y = margin;
+          }
+          doc.text(line, margin, y);
+          y += 10;
+        });
+
+        y += 10;
+        callback();
+      };
+      img.src = entry.photo;
     }
 
-    doc.save("photo_log.pdf");
+    function processEntries(index) {
+      if (index >= entries.length) {
+        doc.save("photo_log.pdf");
+        return;
+      }
+      addEntryToPDF(entries[index], function () {
+        processEntries(index + 1);
+      });
+    }
+
+    processEntries(0);
+  }
+
+  function loadImageAndFixOrientation(file, callback) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const img = new Image();
+      img.onload = function () {
+        EXIF.getData(img, function () {
+          const orientation = EXIF.getTag(this, "Orientation") || 1;
+          const canvas = document.createElement("canvas");
+          const ctx = canvas.getContext("2d");
+          let width = img.width;
+          let height = img.height;
+
+          if (orientation > 4) {
+            canvas.width = height;
+            canvas.height = width;
+          } else {
+            canvas.width = width;
+            canvas.height = height;
+          }
+
+          switch (orientation) {
+            case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
+            case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
+            case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
+            case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
+            case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
+            case 7: ctx.transform(0, -1, -1, 0, height, width); break;
+            case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
+            default: ctx.setTransform(1, 0, 0, 1, 0, 0);
+          }
+
+          ctx.drawImage(img, 0, 0);
+          const correctedDataUrl = canvas.toDataURL("image/jpeg");
+          callback(correctedDataUrl);
+        });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
   }
 </script>
-
 </body>
 </html>
